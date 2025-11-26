@@ -4,29 +4,30 @@ services:
       context: .
       args:
         target: runtime
-    image: ghcr.io/berriai/litellm:main-stable
-    #########################################
-    ## Uncomment these lines to start proxy with a config.yaml file ##
-    # volumes:
-    #  - ./config.yaml:/app/config.yaml
-    # command:
-    #  - "--config=/app/config.yaml"
+    image: ghcr.io/berriai/litellm:main-latest
+    pull_policy: always
+    ########################################
+    # Uncomment these lines to start proxy with a config.yaml file ##
+    volumes:
+     - ./config.yaml:/app/config.yaml
+     - /home/ubuntu/.config/gcloud/application_default_credentials.json:/home/ubuntu/.config/gcloud/application_default_credentials.json
+    command:
+     - "--config"   
+     - "/app/config.yaml"
     ##############################################
     ports:
       - "4000:4000" # Map the container port to the host, change the host port if necessary
     environment:
       DATABASE_URL: "postgresql://llmproxy:dbpassword9090@db:5432/litellm"
       STORE_MODEL_IN_DB: "True" # allows adding models to proxy via UI
+      GOOGLE_APPLICATION_CREDENTIALS: "/home/ubuntu/.config/gcloud/application_default_credentials.json"
     env_file:
       - .env # Load local .env file
+    restart: unless-stopped # Add restart policy to make service more resilient
     depends_on:
-      - db  # Indicates that this service depends on the 'db' service, ensuring 'db' starts first
-    healthcheck:  # Defines the health check configuration for the container
-      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 http://localhost:4000/health/liveliness || exit 1" ]  # Command to execute for health check
-      interval: 30s  # Perform health check every 30 seconds
-      timeout: 10s   # Health check command times out after 10 seconds
-      retries: 3     # Retry up to 3 times if health check fails
-      start_period: 40s  # Wait 40 seconds after container start before beginning health checks
+      db:
+        condition: service_healthy # Ensures db is fully healthy before starting
+    # Temporarily removing health check to see if service starts properly
 
   db:
     image: postgres:16
@@ -46,21 +47,15 @@ services:
       timeout: 5s
       retries: 10
 
-  prometheus:
-    image: prom/prometheus
-    volumes:
-      - prometheus_data:/prometheus
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  qdrant:
+    image: qdrant/qdrant
     ports:
-      - "9090:9090"
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=15d"
-    restart: always
+      - "6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
 
 volumes:
-  prometheus_data:
-    driver: local
   postgres_data:
     name: litellm_postgres_data # Named volume for Postgres data persistence
+  qdrant_storage:
+    name: litellm_qdrant_storage

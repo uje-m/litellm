@@ -1184,12 +1184,13 @@ def completion(  # type: ignore # noqa: PLR0915
         )
 
         if provider_specific_header is not None:
-            headers.update(
-                ProviderSpecificHeaderUtils.get_provider_specific_headers(
-                    provider_specific_header=provider_specific_header,
-                    custom_llm_provider=custom_llm_provider,
-                )
+            # Use merge_headers to properly combine anthropic-beta values
+            # instead of overwriting model config headers with client headers
+            provider_headers = ProviderSpecificHeaderUtils.get_provider_specific_headers(
+                provider_specific_header=provider_specific_header,
+                custom_llm_provider=custom_llm_provider,
             )
+            ProviderSpecificHeaderUtils.merge_headers(headers, provider_headers)
 
         if model_response is not None and hasattr(model_response, "_hidden_params"):
             model_response._hidden_params["custom_llm_provider"] = custom_llm_provider

@@ -111,6 +111,9 @@ from litellm.types.vector_stores import (
     VectorStoreSearchResponse,
 )
 from litellm.types.videos.main import VideoObject
+from litellm.litellm_core_utils.get_provider_specific_headers import (
+    ProviderSpecificHeaderUtils,
+)
 from litellm.utils import (
     CustomStreamWrapper,
     ImageResponse,
@@ -1787,10 +1790,6 @@ class BaseLLMHTTPHandler:
         stream: Optional[bool] = False,
         kwargs: Optional[Dict[str, Any]] = None,
     ) -> Union[AnthropicMessagesResponse, AsyncIterator]:
-        from litellm.litellm_core_utils.get_provider_specific_headers import (
-            ProviderSpecificHeaderUtils,
-        )
-
         if client is None or not isinstance(client, AsyncHTTPHandler):
             async_httpx_client = get_async_httpx_client(
                 llm_provider=litellm.LlmProviders.ANTHROPIC
@@ -1804,15 +1803,17 @@ class BaseLLMHTTPHandler:
             Optional[litellm.types.utils.ProviderSpecificHeader],
             kwargs.get("provider_specific_header", None),
         )
-        extra_headers = ProviderSpecificHeaderUtils.get_provider_specific_headers(
+        provider_extra_headers = ProviderSpecificHeaderUtils.get_provider_specific_headers(
             provider_specific_header=provider_specific_header,
             custom_llm_provider=custom_llm_provider,
         )
-        forwarded_headers = kwargs.get("headers", None)
-        if forwarded_headers and extra_headers:
-            merged_headers = {**forwarded_headers, **extra_headers}
+        forwarded_headers = kwargs.get("headers", None) or extra_headers
+        if forwarded_headers and provider_extra_headers:
+            # Use merge_headers to properly combine anthropic-beta values
+            merged_headers = dict(forwarded_headers)
+            ProviderSpecificHeaderUtils.merge_headers(merged_headers, provider_extra_headers)
         else:
-            merged_headers = forwarded_headers or extra_headers
+            merged_headers = forwarded_headers or provider_extra_headers
         (
             headers,
             api_base,
